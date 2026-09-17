@@ -1,0 +1,166 @@
+[
+  {
+    "id": "PY01",
+    "skill": "Python",
+    "difficulty": "medium",
+    "question": "请介绍一下 Python 中的 GIL（全局解释器锁），以及它对多线程程序的影响。",
+    "key_points": [
+      "GIL 是 CPython 解释器中的全局互斥锁",
+      "同一时刻只有一个线程能执行 Python 字节码",
+      "CPU 密集型任务多线程无法真正并行甚至更慢",
+      "IO 密集型任务受 GIL 影响较小，多线程仍然有效"
+    ],
+    "reference_answer": "GIL（Global Interpreter Lock）是 CPython 解释器中的一把全局互斥锁，它保证同一时刻只有一个线程执行 Python 字节码。因此在多核 CPU 上，CPU 密集型任务使用多线程无法真正并行，甚至因线程切换带来额外开销；而 IO 密集型任务在等待 IO 时会释放 GIL，多线程仍然能带来并发收益。需要真正利用多核时，应使用 multiprocessing 多进程、C 扩展或把计算下沉到不受 GIL 约束的库（如 NumPy）。",
+    "follow_ups": [
+      "你刚才提到了 GIL，那么在多进程环境下，GIL 是否还会影响 Python 程序的并发性能？为什么？",
+      "有哪些绕过或缓解 GIL 限制的方案？请对比它们的适用场景。"
+    ]
+  },
+  {
+    "id": "PY02",
+    "skill": "Python",
+    "difficulty": "easy",
+    "question": "什么是装饰器？请说明它的原理并手写一个带参数的装饰器示例。",
+    "key_points": [
+      "装饰器本质是接收函数并返回新函数的高阶函数",
+      "基于闭包与 @ 语法糖实现",
+      "functools.wraps 用于保留被装饰函数的元信息",
+      "带参数的装饰器需要再包一层函数（三层嵌套）"
+    ],
+    "reference_answer": "装饰器是一个接收函数并返回新函数的高阶函数，通过 @ 语法糖在不修改原函数代码的情况下增强其行为，其原理依赖闭包。带参数的装饰器需要三层嵌套：最外层接收装饰器参数，中间层接收被装饰函数，最内层接收调用参数。实际开发中应使用 functools.wraps 保留原函数的 __name__、__doc__ 等元信息，常见应用有日志、重试、缓存、权限校验等。",
+    "follow_ups": [
+      "装饰器和被装饰函数是在什么时候执行的？多次调用被装饰函数时装饰器代码会重复执行吗？"
+    ]
+  },
+  {
+    "id": "PY03",
+    "skill": "Python",
+    "difficulty": "easy",
+    "question": "迭代器和生成器有什么区别？生成器为什么省内存？",
+    "key_points": [
+      "迭代器实现 __iter__ 和 __next__ 协议",
+      "生成器用 yield 关键字创建，是迭代器的简洁写法",
+      "生成器惰性求值，按需产出元素而不是一次性构建整个列表",
+      "生成器函数执行到 yield 暂停并保存现场，下次从暂停处继续"
+    ],
+    "reference_answer": "迭代器是实现了 __iter__ 和 __next__ 协议的对象；生成器是迭代器的一种简洁实现方式，用 yield 表达式的函数或生成器表达式创建。生成器惰性求值：每次调用 next 时才计算并产出一个元素，函数在 yield 处暂停并保存局部变量与执行位置，下次从暂停点恢复。因此它不需要像列表那样把所有元素一次性放进内存，处理大文件、无限序列或数据流时能显著节省内存。",
+    "follow_ups": [
+      "生成器表达式和列表表达式如何选择？yield 和 return 在函数中同时出现会发生什么？"
+    ]
+  },
+  {
+    "id": "PY04",
+    "skill": "Python",
+    "difficulty": "medium",
+    "question": "Python 的深拷贝和浅拷贝有什么区别？哪些操作是浅拷贝？",
+    "key_points": [
+      "浅拷贝只复制最外层容器，内部元素仍是引用",
+      "深拷贝递归复制所有嵌套对象，完全独立",
+      "copy.copy / copy.deepcopy",
+      "切片、list()、dict.copy()、工厂函数都是浅拷贝",
+      "赋值（=）只是引用传递，不产生拷贝"
+    ],
+    "reference_answer": "赋值语句只是把新名字绑定到同一对象，不产生拷贝。浅拷贝（copy.copy、切片 b=a[:]、list(a)、dict.copy()）只复制最外层容器，容器内的子对象仍然共享引用，修改嵌套元素会互相影响。深拷贝（copy.deepcopy）会递归复制所有嵌套对象，拷贝后两个对象完全独立；deepcopy 通过 memo 字典处理循环引用，避免无限递归。",
+    "follow_ups": [
+      "如果对象里包含不可变元素和可变元素混合嵌套，deepcopy 会怎么处理不可变元素？"
+    ]
+  },
+  {
+    "id": "PY05",
+    "skill": "Python",
+    "difficulty": "medium",
+    "question": "多线程、多进程和协程分别适合什么场景？为什么？",
+    "key_points": [
+      "多线程适合 IO 密集型任务，受 GIL 限制不适合 CPU 密集型",
+      "多进程适合 CPU 密集型任务，可利用多核但有进程间通信与内存开销",
+      "协程适合高并发 IO（如上万网络连接），单线程内由事件循环调度",
+      "线程/进程切换由操作系统调度，协程切换在用户态由程序控制，开销更小"
+    ],
+    "reference_answer": "多线程适合 IO 密集型任务：线程在等待 IO 时释放 GIL，让其他线程运行，但 CPU 密集型任务受 GIL 限制无法并行。多进程每个进程有独立解释器和 GIL，适合 CPU 密集型任务并能利用多核，代价是内存占用高、进程间通信（队列、管道）开销大。协程是单线程内由事件循环（asyncio）调度的用户态并发，切换开销极小，适合高并发网络 IO（如上万连接的网关、爬虫），但不能利用多核，且依赖生态中的异步库。",
+    "follow_ups": [
+      "一个 Web 网关需要同时维持 1 万条长连接并做复杂计算，你会怎么设计进程/线程/协程结构？"
+    ]
+  },
+  {
+    "id": "PY06",
+    "skill": "Python",
+    "difficulty": "medium",
+    "question": "介绍 Python 的垃圾回收机制。",
+    "key_points": [
+      "主力是引用计数，引用归零立即回收",
+      "引用计数无法解决循环引用，用标记-清除处理容器对象循环引用",
+      "分代回收（0/1/2 三代）基于弱代假设提升效率",
+      "weakref、gc 模块可观察与干预回收"
+    ],
+    "reference_answer": "CPython 的内存回收以引用计数为主：每个对象记录被引用次数，计数归零立即释放，实时性好但无法处理循环引用。为此引入标记-清除算法，从根对象出发标记存活对象、清除不可达的容器对象，专门解决循环引用。在此基础上再做分代回收：对象按存活时间分为 0/1/2 三代，新对象在 0 代，经历一次回收仍存活就晋升到下一代，越老扫描频率越低，利用\"对象大多朝生夕死\"的弱分代假说降低整体开销。gc 模块可用于手动触发与调试，weakref 提供不增加引用计数的弱引用。",
+    "follow_ups": [
+      "什么情况下对象明明不再使用却不会被回收？如何在生产环境排查内存泄漏？"
+    ]
+  },
+  {
+    "id": "PY07",
+    "skill": "Python",
+    "difficulty": "medium",
+    "question": "解释 Python 的作用域规则（LEGB）以及闭包的工作原理。",
+    "key_points": [
+      "LEGB：Local → Enclosing → Global → Built-in 查找顺序",
+      "闭包是引用了外层函数变量的内层函数，外层返回后变量仍存活",
+      "内层函数修改外层变量需要 nonlocal，修改全局需要 global",
+      "闭包变量保存在函数对象的 __closure__（cell 对象）中"
+    ],
+    "reference_answer": "Python 按 LEGB 顺序查找变量：先 Local（函数内部），再 Enclosing（外层嵌套函数），然后 Global（模块级），最后 Built-in（内建命名空间）。内层函数引用了外层作用域的变量就形成闭包：外层函数返回后，其局部变量被内层函数的 __closure__（cell 对象）持有而继续存活。需要注意的是在内层函数中给外层变量赋值会创建新的局部变量，必须用 nonlocal（外层函数变量）或 global（全局变量）声明；典型陷阱是循环中 lambda 闭包共享循环变量，最终取到的是最后一次的值。",
+    "follow_ups": [
+      "为什么循环里创建的 lambda 列表执行结果都是同一个值？如何修复？"
+    ]
+  },
+  {
+    "id": "PY08",
+    "skill": "Python",
+    "difficulty": "hard",
+    "question": "简述 asyncio 事件循环的原理，以及 async/await 的执行模型。",
+    "key_points": [
+      "事件循环是单线程内调度协程的调度器，基于 IO 多路复用（如 epoll/kqueue）",
+      "协程是可暂停/恢复的函数，await 让出控制权给事件循环",
+      "IO 就绪后回调唤醒对应协程继续执行",
+      "async def 定义的函数调用后返回协程对象，不会立即执行",
+      "同步阻塞调用会卡死整个事件循环，需要 run_in_executor 或异步库"
+    ],
+    "reference_answer": "async def 函数被调用时并不执行，而是返回一个协程对象；事件循环是单线程调度器，负责驱动这些协程。协程在 await 处让出控制权：如果 await 的是 IO 操作，事件循环把 socket 注册到 IO 多路复用器（Linux 上是 epoll），转而执行其他就绪的协程；IO 就绪后再恢复对应协程从暂停点继续执行。整个模型是\"协作式调度\"——协程之间主动让出而不是被抢占，因此任何同步阻塞调用（time.sleep、阻塞 socket、重计算）都会卡住整个循环，必须改用异步库或用 run_in_executor 丢进线程池。",
+    "follow_ups": [
+      "在协程里执行了一个耗时的同步计算，会发生什么？如何解决？"
+    ]
+  },
+  {
+    "id": "PY09",
+    "skill": "Python",
+    "difficulty": "hard",
+    "question": "有哪些绕过 GIL 限制的方案？请对比说明。",
+    "key_points": [
+      "multiprocessing 多进程：每个进程独立 GIL，可利用多核，代价是 IPC 开销",
+      "把计算下沉到 C/C++ 扩展或 NumPy 等库，在扩展内释放 GIL",
+      "concurrent.futures.ProcessPoolExecutor 处理批量并行计算",
+      "Python 3.12+ 子解释器（PEP 684）与 3.13 free-threading（PEP 703）实验性去 GIL",
+      "IO 密集场景直接用 asyncio 更轻量"
+    ],
+    "reference_answer": "主流方案有三类：一是 multiprocessing / ProcessPoolExecutor 多进程，每个进程拥有独立解释器与 GIL，真正利用多核，但要承担进程启动、序列化与 IPC 开销，适合任务粒度较粗的批量计算；二是把热点代码下沉到 C/C++ 扩展（或 NumPy、Torch 这类库），在扩展内部释放 GIL 执行原生代码，兼顾性能与共享内存；三是语言层面新进展——Python 3.12 的子解释器拥有独立 GIL（PEP 684），3.13 引入可选的 free-threading 无 GIL 构建（PEP 703），目前仍属实验性。另外 IO 密集场景其实不需要绕过 GIL，直接用 asyncio 或多线程即可。",
+    "follow_ups": [
+      "multiprocessing 在什么情况下性能反而不如多线程？序列化开销如何规避？"
+    ]
+  },
+  {
+    "id": "PY10",
+    "skill": "Python",
+    "difficulty": "hard",
+    "question": "什么是元类（metaclass）？它有哪些典型应用场景？",
+    "key_points": [
+      "类是 type 的实例，元类是\"类的类\"，控制类的创建过程",
+      "通过继承 type 并重写 __new__/__init__ 自定义元类",
+      "class 语句执行时会调用其元类创建类对象",
+      "典型应用：ORM 字段注册（Django/SQLAlchemy）、ABC 抽象基类注册、自动注册子类、接口校验"
+    ],
+    "reference_answer": "在 Python 中类本身也是对象，是它的元类的实例，默认元类是 type。class 语句执行时会调用元类的 __new__（生成类对象）与 __init__（初始化），继承 type 并重写这两个方法就能拦截和修改类的创建过程：可以检查/改写属性、自动注册类、为方法做包装等。典型应用包括 ORM 的字段收集与表映射（如 Django Models、SQLAlchemy）、abc.ABCMeta 强制抽象方法实现、插件系统的自动子类注册等。日常开发中应优先考虑 __init_subclass__、装饰器等更简单的手段，元类是\"为了别人写代码而写代码\"的高级工具，可读性成本高。",
+    "follow_ups": [
+      "ORM 里是如何利用元类把类属性自动收集成数据库表结构的？"
+    ]
+  }
+]

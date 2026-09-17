@@ -1,0 +1,90 @@
+[
+  {
+    "id": "LX01",
+    "skill": "Linux",
+    "difficulty": "easy",
+    "question": "grep、sed、awk 各自适合做什么？举例说明三者的配合使用。",
+    "key_points": ["grep：按正则/字符串过滤文本行，-r 递归、-i 忽略大小写、-v 反选、-E 扩展正则", "sed：流编辑器，逐行处理，常用于替换（s/old/new/g）、删除、增删行", "awk：按列（字段）处理文本，支持变量、条件、循环，适合统计", "配合示例：grep 过滤 → awk 取列 → sort | uniq -c 统计"],
+    "reference_answer": "三者是 Linux 文本处理三剑客，定位不同：grep 是查找工具，按正则过滤出匹配的行，常用选项 -r 递归目录、-i 忽略大小写、-v 反向匹配、-E 扩展正则、-n 显示行号；sed 是流编辑器，逐行读入按脚本编辑后输出，最常用的是替换 s/old/new/g，还有删除行 d、按行号增删、直接改文件 -i；awk 是按\"列\"处理的编程语言，自动按空白分列（$1、$2、$NF 最后一列），支持条件、数组、循环，适合做统计汇总，如 awk '{count[$1]++} END {for (ip in count) print count[ip], ip}'。典型管道配合：grep 'ERROR' app.log | awk '{print $5}' | sort | uniq -c | sort -rn，先过滤错误行，再取错误类型列，排序去重计数后按次数倒序。",
+    "follow_ups": [
+      "如何统计一个 nginx 日志文件中访问量最高的前 10 个 IP？写出完整命令。"
+    ]
+  },
+  {
+    "id": "LX02",
+    "skill": "Linux",
+    "difficulty": "easy",
+    "question": "如何查看某个端口被哪个进程占用？如何杀掉它？",
+    "key_points": ["ss -tlnp | grep 端口 或 lsof -i:端口（netstat 已过时）", "-t TCP、-l 监听、-n 数字、-p 进程", "fuser -v 端口/tcp 也可定位", "kill PID 优雅终止（SIGTERM），kill -9 强杀（SIGKILL），killall/pkill 按名字"],
+    "reference_answer": "现代方法首选 ss -tlnp | grep :8080 或 lsof -i :8080，输出中的 LISTEN 行会给出 PID 和进程名（需要相应权限，root 可看全部）；旧系统可能只有 netstat -tlnp，功能类似；fuser 8080/tcp 也能直接列出占用该端口的进程。杀进程：默认 kill PID 发送 SIGTERM，允许进程清理资源优雅退出；进程无响应时 kill -9 PID 发 SIGKILL 由内核强制终止（注意可能丢数据、子进程变孤儿，应作为最后手段）；按名字可用 pkill -f 进程名或 killall。定位\"端口占用启动失败\"时，先看是不是 TIME_WAIT 残留或僵尸父进程重新拉起，必要时结合 systemctl / 容器运行时排查。",
+    "follow_ups": [
+      "kill -9 和 kill -15 有什么本质区别？为什么尽量不用 -9？"
+    ]
+  },
+  {
+    "id": "LX03",
+    "skill": "Linux",
+    "difficulty": "easy",
+    "question": "解释 Linux 文件权限 rwxr-xr-- 的含义，以及 chmod 754 的作用。",
+    "key_points": ["九位分三组：属主 u、属组 g、其他 o", "r=4 读、w=2 写、x=1 执行", "rwxr-xr-- = 754：属主可读写执行，组可读执行，其他人只读", "对目录而言 x 是进入目录、r 是列目录、w 是增删文件", "chmod/chown/chgrp 修改权限与属主，umask 决定默认权限"],
+    "reference_answer": "rwxr-xr-- 共九位，前三位是属主（u）、中间是属组（g）、最后是其他人（o）的权限，r 读=4、w 写=2、x 执行=1。rwxr-xr-- 即属主可读可写可执行（4+2+1=7）、属组可读可执行（5）、其他人只读（4），chmod 754 file 就是设置这三组八进制权限。要注意目录的权限语义不同：x 表示能否进入（cd）和访问其内文件，r 表示能否列出目录内容，w 表示能否在其中创建/删除文件——删除文件只看目录的 w 权限而不看文件本身。相关命令：chown user:group 改属主属组，umask 决定新建文件的默认权限掩码，SUID/SGID/sticky 位（如 /tmp 的 sticky 位）是三个特殊权限。",
+    "follow_ups": [
+      "为什么一个文件属主没有写权限（444），root 仍然能改它？"
+    ]
+  },
+  {
+    "id": "LX04",
+    "skill": "Linux",
+    "difficulty": "medium",
+    "question": "服务器 CPU 负载很高，你会如何排查？",
+    "key_points": ["uptime/load average：负载 = 运行 + 不可中断睡眠进程数，与 CPU 核数对比判断高低", "top/htop：看整体 CPU、按 P 排序找高 CPU 进程、区分 us/sy/wa/si", "w/iowait 高说明瓶颈在 IO，用 iostat -x、pidstat -d 定位", "进程级深挖：pidstat -u、top -H 看线程、strace 跟踪系统调用、perf 采样火焰图", "结合业务：是否定时任务、流量洪峰、死循环、GC 频繁"],
+    "reference_answer": "第一步看 uptime 的 load average：负载表示\"正在运行 + 等待运行 + 不可中断睡眠\"的进程数均值，要和 CPU 核数比较，4 核机器负载 8 说明明显过载。第二步 top：按 1 展开每核利用率，按 P 按 CPU 排序找元凶进程，同时关注 CPU 构成——us 高是应用计算、sy 高是系统调用频繁、wa 高说明 CPU 在等 IO（瓶颈其实在磁盘，转 iostat -x / pidstat -d 查）、si 高可能被网卡软中断或挖矿进程利用。第三步进程级定位：top -H -p PID 看是不是某个线程失控；strace -p 跟踪系统调用；Java 应用注意是不是 GC 频繁（jstat 看GC）；perf top 或 perf record + 火焰图定位热点函数。最后结合业务时间点：是否定时任务、流量洪峰、配置变更、发布引入死循环。内存不足引起的频繁换页也会推高负载，同时用 free -h、vmstat 的 si/so 交叉验证。",
+    "follow_ups": [
+      "load average 很高但 CPU 使用率很低，可能是什么原因？"
+    ]
+  },
+  {
+    "id": "LX05",
+    "skill": "Linux",
+    "difficulty": "medium",
+    "question": "软链接和硬链接有什么区别？",
+    "key_points": ["硬链接：目录项指向同一 inode，删除原文件不影响，不能跨文件系统、不能对目录", "软链接：独立文件保存路径，类似快捷方式，可跨文件系统、可指向目录", "原文件删除后软链接悬空失效", "ls -i 看 inode，stat 看链接数（Links）"],
+    "reference_answer": "硬链接是通过目录项直接指向同一个 inode 的另一个文件名，与原文件完全平等：删除其中任何一个，只要链接数不为 0 数据就不会释放；限制是不能跨文件系统（inode 只在本文件系统内有效）、不能对目录创建（避免形成环）。软链接（符号链接）是一个独立的小文件，内容是目标路径字符串，拥有自己的 inode：可以跨文件系统、可以对目录、可以指向不存在的路径（悬空链接），但目标被删除或移动后立即失效。查看方式：ls -i 对比 inode 号是否相同（相同即硬链接），stat 的 Links 字段是该 inode 的硬链接计数，ls -l 中软链接显示为 lrwxrwxrwx 并带 -> 指向。典型用途：版本切换（软链接指向当前版本目录）、防误删备份硬链接（如 rsync 快照）。",
+    "follow_ups": [
+      "cp 和 mv 对 inode 分别做了什么？跨文件系统 mv 的行为是怎样的？"
+    ]
+  },
+  {
+    "id": "LX06",
+    "skill": "Linux",
+    "difficulty": "medium",
+    "question": "什么是僵尸进程和孤儿进程？僵尸进程过多怎么处理？",
+    "key_points": ["子进程先死、父进程未调用 wait/waitpid 回收，残留 task 结构与退出状态 → 僵尸（Z 状态）", "孤儿进程：父进程先死，被 init/systemd（PID 1）收养并负责回收，无害", "僵尸进程杀不掉（已死），只能处理其父进程：让父进程 wait、杀掉父进程使其被 1 号收养", "定位：ps aux | grep ' Z'，ps -o ppid= -p 查父进程"],
+    "reference_answer": "僵尸进程：子进程已退出，但父进程没有调用 wait/waitpid 读取它的退出状态，内核只能保留其进程表项（Z 状态，约占一个 PID 和少量元信息），kill 对它无效因为它已经死了。孤儿进程：父进程先于子进程退出，子进程被 1 号进程（systemd/init）收养，退出后由 1 号负责 wait 回收，是无害的。处理僵尸进程的关键是找到它的父进程：ps aux | awk '$8 ~ /^Z/' 找出 Z 状态进程，ps -o ppid= -p <pid> 拿到父进程；修复思路要么让父进程正确 wait（或安装 SIGCHLD 处理器/用 signal(SIGCHLD, SIG_IGN) 让内核自动回收），要么 kill 掉有问题的父进程，僵尸随之被 1 号收养清理。若 1 号进程本身异常（如容器内应用作为 PID 1 没有回收能力），应引入 tini/dumb-init 作为入口。",
+    "follow_ups": [
+      "为什么在 Docker 容器里更容易出现僵尸进程？tini 起什么作用？"
+    ]
+  },
+  {
+    "id": "LX07",
+    "skill": "Linux",
+    "difficulty": "hard",
+    "question": "对比 select、poll、epoll 的原理与区别，epoll 为什么高效？",
+    "key_points": ["select：fd_set 位图固定 1024 限制，每次调用全量拷贝+线性扫描 O(n)", "poll：pollfd 数组突破数量限制，但仍全量拷贝与线性扫描", "epoll：epoll_create/ctl/wait，内核维护红黑树 + 就绪链表", "epoll_wait 只返回就绪 fd，O(1) 获取，无重复拷贝", "LT 水平触发 vs ET 边缘触发：ET 需一次读尽配合非阻塞 IO，减少唤醒次数"],
+    "reference_answer": "三者都是 IO 多路复用机制。select 用固定大小的 fd_set 位图（默认 1024 上限），每次调用要把整个集合从用户态拷贝到内核，内核线性扫描所有 fd，返回后用户还要再遍历一遍才知道谁就绪，复杂度 O(n)。poll 用 pollfd 数组突破了 1024 数量限制，但全量拷贝和 O(n) 扫描的问题依旧。epoll 在内核维护数据结构：epoll_create 建实例，epoll_ctl 增删改监听的 fd（红黑树存储，只在注册时拷贝一次），fd 就绪时由回调把它挂到就绪链表，epoll_wait 只把就绪链表返回给用户——事件收集 O(1)，海量连接中只关心活跃的那一小部分，这正是 nginx、Redis 高并发的基石。epoll 还有两种触发模式：LT 水平触发只要可读就持续通知，编程简单；ET 边缘触发只在状态变化时通知一次，必须配合非阻塞 fd 一次把数据读/写到 EAGAIN，减少重复唤醒，性能更高但更难写。",
+    "follow_ups": [
+      "惊群问题是什么？epoll 和 Nginx/Redis 是怎么应对的？"
+    ]
+  },
+  {
+    "id": "LX08",
+    "skill": "Linux",
+    "difficulty": "medium",
+    "question": "写一个 Shell 命令/脚本：统计 nginx 访问日志中 PV 最高的前 10 个 IP。",
+    "key_points": ["awk '{print $1}' 提取第一列 IP", "sort | uniq -c 去重计数，或 awk 用关联数组统计", "sort -rn 按数值倒序，head -10 取前 10", "组合：awk '{print $1}' access.log | sort | uniq -c | sort -rn | head -10", "进阶： awk '{c[$1]++} END {for(i in c) print c[i], i}' access.log | sort -rn | head"],
+    "reference_answer": "经典一行命令：awk '{print $1}' access.log | sort | uniq -c | sort -rn | head -10。逐段解释：awk '{print $1}' 按空白分列取第一列（nginx 默认格式里是客户端 IP）；sort 把相同 IP 排到一起（uniq 只比较相邻行所以必须先排序）；uniq -c 对相邻重复行计数，输出形如\"  123 1.2.3.4\"；sort -rn 按第一列数字倒序；head -10 取前 10。不用 sort 也可以完全在 awk 里做：awk '{cnt[$1]++} END {for (ip in cnt) print cnt[ip], ip}' access.log | sort -rn | head -10，关联数组一次遍历统计，大文件时少一次管道排序，通常更快。生产中还可以过滤时间窗口（grep 特定小时）、排除内网 IP、输出到监控。",
+    "follow_ups": [
+      "日志文件有 10GB，这个命令会不会把内存打爆？sort 是怎么处理大文件的？"
+    ]
+  }
+]

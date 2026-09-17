@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>InterviewAI · AI 智能面试系统</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%A7%A0%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css?v=2">
+</head>
+<body>
+  <header class="topbar" id="topbar" hidden>
+    <div class="topbar-inner">
+      <a class="brand" href="#/">
+        <span class="brand-logo">IV</span>
+        <span class="brand-text">InterviewAI<small>AI 智能面试系统</small></span>
+      </a>
+      <nav class="nav" id="mainNav">
+        <a href="#/" data-nav="home">开始面试</a>
+        <a href="#/history" data-nav="history">历史记录</a>
+        <a href="#/admin" data-nav="admin" id="adminNav" hidden>题库管理</a>
+      </nav>
+      <div class="user-chip">
+        <span class="avatar" id="userAvatar">U</span>
+        <span id="username"></span>
+        <button class="link-btn" id="logoutBtn">退出</button>
+      </div>
+    </div>
+  </header>
+
+  <main id="app">
+    <!-- ===== 登录 / 注册 ===== -->
+    <section id="view-auth" class="view" hidden>
+      <div class="auth-wrap">
+        <div class="auth-hero">
+          <h1>让 AI 像真正的面试官一样面试你</h1>
+          <p class="auth-sub">RAG 题库检索 · Agent 动态追问 · 结构化评分报告 · 学习计划</p>
+          <ul class="feature-list">
+            <li><b>智能规划</b>岗位/JD → 技能提取 → 检索题库 → 定制面试计划</li>
+            <li><b>动态追问</b>分析每一句回答，判断知识水平，顺着薄弱点追问</li>
+            <li><b>综合报告</b>逐题评分 + 技能雷达图 + 薄弱点 + 下一阶段学习计划</li>
+          </ul>
+        </div>
+        <div class="auth-card">
+          <div class="auth-tabs">
+            <button class="tab active" data-tab="login">登录</button>
+            <button class="tab" data-tab="register">注册</button>
+          </div>
+          <form id="authForm">
+            <label class="field">
+              <span>用户名</span>
+              <input id="authUsername" type="text" placeholder="请输入用户名" autocomplete="username" required>
+            </label>
+            <label class="field">
+              <span>密码</span>
+              <input id="authPassword" type="password" placeholder="请输入密码（注册至少 6 位）" autocomplete="current-password" required>
+            </label>
+            <button type="submit" class="btn btn-primary btn-block" id="authSubmit">登 录</button>
+            <p class="auth-tip">演示账号：<code>demo</code> / <code>demo1234</code><br>管理员（可管理题库）：<code>admin</code> / <code>admin1234</code></p>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== 首页：开始面试 ===== -->
+    <section id="view-home" class="view" hidden>
+      <div class="home-hero">
+        <h1>选择岗位，开始一场真实感十足的模拟面试</h1>
+        <p>AI 面试官会根据你的每一次回答，动态决定「继续追问」还是「进入下一题」</p>
+        <span class="mode-badge" id="modeBadge"></span>
+      </div>
+      <div class="home-grid">
+        <div class="card form-card">
+          <h2 class="card-title">1 · 选择岗位</h2>
+          <div class="position-grid" id="positionGrid"></div>
+          <h2 class="card-title">2 · 选择难度</h2>
+          <div class="segmented" id="difficultySeg"></div>
+          <h2 class="card-title">3 · 定制考察点 <small class="optional">可选：粘贴 JD，AI 将从中提取技能点</small></h2>
+          <textarea id="jdInput" rows="4" placeholder="粘贴目标岗位的 JD（职位描述），例如：&#10;负责公司核心业务系统的设计与开发，要求熟悉 Python、MySQL 索引优化与 Redis 缓存设计，有高并发服务治理经验…"></textarea>
+          <button class="btn btn-primary btn-block btn-lg" id="startBtn">开始面试 →</button>
+        </div>
+        <aside class="side-col">
+          <div class="card stat-card">
+            <h3>题库概览</h3>
+            <div id="bankStats" class="bank-stats"></div>
+          </div>
+          <div class="card feature-card">
+            <h3>这场面试由什么驱动？</h3>
+            <ul class="tech-list">
+              <li><b>RAG</b>按岗位与 JD 对题库做语义检索出题</li>
+              <li><b>Agent</b>逐题分析回答 → 决策追问 / 推进</li>
+              <li><b>Function Calling</b>结构化输出评分与报告</li>
+              <li><b>个性化报告</b>技能雷达图 + 学习计划</li>
+            </ul>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ===== 面试进行中 ===== -->
+    <section id="view-interview" class="view" hidden>
+      <div class="interview-grid">
+        <div class="card chat-card">
+          <div class="chat-head">
+            <div>
+              <h3 id="chatTitle">面试进行中</h3>
+              <p id="chatSub" class="muted"></p>
+            </div>
+            <button class="btn btn-ghost btn-danger" id="endBtn">提前结束</button>
+          </div>
+          <div class="progress-line"><div class="progress-bar" id="progressBar"></div></div>
+          <div class="chat-list" id="chatList"></div>
+          <div class="chat-input">
+            <textarea id="chatInput" rows="2" placeholder="输入你的回答…（Enter 发送，Shift+Enter 换行）"></textarea>
+            <button class="btn btn-primary" id="sendBtn">发送</button>
+          </div>
+        </div>
+        <aside class="plan-card card">
+          <h3>面试计划</h3>
+          <p class="muted small" id="planMeta"></p>
+          <div class="plan-skills" id="planSkills"></div>
+          <div class="plan-list" id="planList"></div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ===== 面试报告 ===== -->
+    <section id="view-report" class="view" hidden>
+      <div id="reportBody"></div>
+    </section>
+
+    <!-- ===== 历史记录 ===== -->
+    <section id="view-history" class="view" hidden>
+      <div class="card">
+        <div class="history-head">
+          <h2>历史面试</h2>
+          <a class="btn btn-ghost" href="#/">+ 新面试</a>
+        </div>
+        <div id="historyList" class="history-list"></div>
+      </div>
+    </section>
+
+    <!-- ===== 题库管理（管理员） ===== -->
+    <section id="view-admin" class="view" hidden>
+      <div class="card">
+        <div class="admin-head">
+          <h2>题库管理 <small class="optional">修改实时生效（RAG 索引热更新，无需重启）</small></h2>
+          <button class="btn btn-primary" id="newQBtn">+ 新增题目</button>
+        </div>
+        <div class="admin-filters">
+          <select id="skillFilter"></select>
+          <select id="diffFilter">
+            <option value="">全部难度</option>
+            <option value="easy">基础</option>
+            <option value="medium">核心</option>
+            <option value="hard">进阶</option>
+          </select>
+          <input id="qSearch" type="text" placeholder="搜索题干 / 考察要点，回车搜索">
+          <span id="qCount" class="muted small"></span>
+        </div>
+        <div id="qForm" class="qform hidden">
+          <h3 id="qFormTitle"></h3>
+          <div class="qform-grid">
+            <label class="field">
+              <span>技能（可输入新技能名，将自动创建对应题库文件）</span>
+              <input id="fSkill" list="skillOptions" placeholder="如 Python / MySQL / Go">
+            </label>
+            <datalist id="skillOptions"></datalist>
+            <div class="field">
+              <span>难度</span>
+              <div class="segmented" id="fDiffSeg"></div>
+            </div>
+          </div>
+          <label class="field">
+            <span>题干</span>
+            <textarea id="fQuestion" rows="2" placeholder="请输入面试问题"></textarea>
+          </label>
+          <label class="field">
+            <span>考察要点（每行一条，AI 依据这些要点判分）</span>
+            <textarea id="fKeyPoints" rows="4" placeholder="要点一&#10;要点二&#10;要点三"></textarea>
+          </label>
+          <label class="field">
+            <span>参考答案</span>
+            <textarea id="fReference" rows="5" placeholder="面试官评分与追问的依据"></textarea>
+          </label>
+          <label class="field">
+            <span>候选追问（每行一条，可留空；真实大模型模式下 AI 也会动态生成追问）</span>
+            <textarea id="fFollowUps" rows="3" placeholder="追问一&#10;追问二"></textarea>
+          </label>
+          <div class="qform-actions">
+            <button class="btn btn-primary" id="saveQBtn">保存</button>
+            <button class="btn btn-ghost" id="cancelQBtn">取消</button>
+          </div>
+        </div>
+        <div class="qtable-wrap">
+          <table class="qtable" id="qTable"></table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" hidden></div>
+  <div id="loading" class="loading-mask" hidden>
+    <div class="spinner"></div>
+    <p id="loadingText">加载中…</p>
+  </div>
+
+  <script src="app.js?v=2"></script>
+</body>
+</html>

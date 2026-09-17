@@ -1,0 +1,90 @@
+[
+  {
+    "id": "RD01",
+    "skill": "Redis",
+    "difficulty": "easy",
+    "question": "介绍 Redis 的常用数据结构及其典型应用场景。",
+    "key_points": ["String：缓存对象 JSON、计数器、分布式锁（setnx）", "Hash：对象字段级存储，如购物车、用户属性", "List：消息队列（lpush/rpop）、最新列表", "Set：去重、共同好友（交集）、抽奖", "ZSet：排行榜（score 排序）、延迟队列", "底层编码：SDS 动态字符串、ziplist/listpack、skiplist 跳表等"],
+    "reference_answer": "五种基本类型：String 最常用，缓存序列化对象、INCR 计数器、SETNX 加锁；Hash 适合存储对象的字段级读写，如购物车（userId 为 key，商品为 field，数量为 value）；List 支持双向操作，可做简单消息队列、最新动态列表；Set 无序去重，支持交并差集，用于共同好友、标签、抽奖去重；ZSet 带 score 排序，是排行榜、延迟队列的标准实现。进阶还有 Bitmap（签到、活跃统计）、HyperLogLog（UV 基数估计）、GEO（附近的人）、Stream（更完善的消息队列）。底层实现上，String 用 SDS 动态字符串（O(1) 取长度、预分配减少 realloc），小数据用 listpack/intset 紧凑编码节省内存，ZSet 用跳表 + dict 双结构实现 O(logN) 范围查询和 O(1) 查分。",
+    "follow_ups": [
+      "ZSet 的底层跳表是怎么实现的？为什么不用红黑树？"
+    ]
+  },
+  {
+    "id": "RD02",
+    "skill": "Redis",
+    "difficulty": "medium",
+    "question": "什么是缓存穿透、缓存击穿、缓存雪崩？分别如何解决？",
+    "key_points": ["穿透：查询不存在的数据，缓存与 DB 都没有，请求全打到 DB；解决：缓存空值（短 TTL）、布隆过滤器、参数校验", "击穿：热点 key 过期瞬间大量并发打到 DB；解决：互斥锁/逻辑过期、热点不过期", "雪崩：大量 key 同时过期或 Redis 宕机；解决：过期时间加随机、多级缓存、集群高可用、限流降级", "三者都是\"请求绕过缓存直接打到数据库\"的一致性/可用性问题"],
+    "reference_answer": "三者场景不同：缓存穿透是查询数据库中根本不存在的数据（如恶意传非法 ID），缓存永远无法命中，每次都打到 DB。对策：对空结果也缓存并设置较短 TTL、用布隆过滤器在缓存前快速拦截\"一定不存在\"的 key、入口做参数合法性校验。缓存击穿是某个热点 key 在过期的一瞬间，大量并发请求同时穿透到 DB。对策：用分布式互斥锁保证只有一个请求回源重建缓存，其他请求等待；或\"逻辑过期\"——物理上不设置 TTL，值里带过期字段，发现逻辑过期后异步重建。缓存雪崩是大面积 key 同时过期或 Redis 实例宕机导致 DB 瞬间被打垮。对策：TTL 加随机抖动避免集体过期、构建多级缓存（本地缓存 + Redis）、Redis 高可用（哨兵/集群）、对 DB 限流熔断降级。",
+    "follow_ups": [
+      "布隆过滤器为什么会误判？误判率由什么决定？能不能删除元素？"
+    ]
+  },
+  {
+    "id": "RD03",
+    "skill": "Redis",
+    "difficulty": "medium",
+    "question": "RDB 和 AOF 两种持久化方式的原理与取舍是什么？",
+    "key_points": ["RDB：fork 子进程定期生成二进制快照，文件小恢复快，可能丢失最后一次快照后的数据", "fork 采用写时复制 COW，主进程继续服务", "AOF：追加写命令日志（appendfsync always/everysec/no），丢数据少但文件大恢复慢", "AOF 重写（bgrewriteaof）压缩体积；4.0+ 混合持久化（RDB 头 + 增量 AOF）"],
+    "reference_answer": "RDB 是某一时刻的全量二进制快照：执行 save/bgsave 时主进程 fork 出子进程，子进程遍历内存生成 RDB 文件，fork 利用操作系统的写时复制（COW），主进程仍可对外服务。优点是文件紧凑、恢复快；缺点是两次快照之间的数据在宕机时会丢失。AOF 以追加方式记录每条写命令，通过 appendfsync 策略控制刷盘频率：always 每条刷盘最安全但性能差、everysec 每秒刷盘最多丢 1 秒数据（常用）、no 交给操作系统。AOF 文件会越来越大，通过 AOF 重写（bgrewriteaof，同样 fork 子进程根据当前内存状态生成最小命令集）压缩。实际生产推荐 Redis 4.0+ 的混合持久化：重写后的 AOF 文件前半段是 RDB 全量、后半段是增量 AOF 命令，兼顾恢复速度与数据安全。",
+    "follow_ups": [
+      "bgsave 期间主进程写入的数据会不会丢？写时复制在内存占用上有什么风险？"
+    ]
+  },
+  {
+    "id": "RD04",
+    "skill": "Redis",
+    "difficulty": "medium",
+    "question": "Redis 的过期删除策略和内存淘汰策略分别是什么？",
+    "key_points": ["过期删除：惰性删除（访问时检查）+ 定期删除（随机抽样清理）", "内存淘汰（maxmemory 满时）：noeviction 默认拒绝写", "lru/lfu/ttl/random 四个维度，volatile 针对有 TTL 的 key，allkeys 全部 key", "近似 LRU：随机采样 5 个 key 淘汰最久未用的，省内存", "LFU（4.0+）：按访问频率，counter 用对数计数器衰减"],
+    "reference_answer": "过期删除针对\"设置了 TTL 的 key\"：Redis 不用定时器遍历（成本太高），而是组合两种策略——惰性删除，访问 key 时发现过期才删；定期删除，后台每 100ms 随机抽取一批设置了过期时间的 key 检查，过期即删，若过期比例过高则继续下一轮，同时有时间上限避免阻塞主线程。内存淘汰是 maxmemory 达到上限时腾空间的策略：noeviction（默认，写请求报错）；allkeys-lru / volatile-lru（全库/仅带 TTL 的 key 中淘汰最近最少使用）；allkeys-lfu / volatile-lfu（4.0+ 按访问频率淘汰）；random 与 volatile-ttl 等变体。注意 Redis 的 LRU 是近似 LRU：随机采样 N 个 key（默认 5）淘汰其中最久未访问的，避免维护全局链表的开销；LFU 的访问计数采用对数概率递增并周期衰减，防止偶发访问污染。",
+    "follow_ups": [
+      "为什么 Redis 的 LRU 是\"近似 LRU\"？精确 LRU 的代价在哪里？"
+    ]
+  },
+  {
+    "id": "RD05",
+    "skill": "Redis",
+    "difficulty": "hard",
+    "question": "如何用 Redis 实现分布式锁？有哪些需要注意的坑？",
+    "key_points": ["加锁：SET key uuid NX PX ttl，原子命令", "唯一标识（uuid）+ Lua 脚本校验身份再删除，防止误删别人的锁", "业务超时锁过期问题：看门狗续期（如 Redisson watchdog）", "主从切换锁丢失问题：RedLock（向多个独立节点加锁，多数成功才算成功），存在争议", "解锁、重入、阻塞等待可借助 Redisson 等成熟客户端"],
+    "reference_answer": "最简实现：SET lock_key unique_value NX PX 30000，NX 保证互斥、PX 设置过期防止死锁、value 用请求唯一标识标记持锁者。释放锁必须用 Lua 脚本原子地\"先比对 value 是自己的才 DEL\"，否则可能误删别人的锁（GET 和 DEL 分开执行有竞态窗口）。两大经典问题：① 业务执行时间超过锁 TTL，锁提前过期被别人抢占——用看门狗机制（如 Redisson watchdog）后台定时续期；② 主从架构下主节点写入锁后未同步到从库就宕机，从库晋升导致锁丢失——RedLock 方案向多个独立的 Redis 实例依次加锁、半数以上成功且耗时小于 TTL 才算持锁，但该方案因时钟假设存在争议。工程上更推荐用 Redisson 这类成熟客户端（可重入、自动续期、等待队列），或干脆使用 ZooKeeper/etcd 等更强调一致性的组件实现锁。",
+    "follow_ups": [
+      "Redisson 的看门狗默认多久续一次期？如果持有锁的客户端 GC 停顿很久会发生什么？"
+    ]
+  },
+  {
+    "id": "RD06",
+    "skill": "Redis",
+    "difficulty": "hard",
+    "question": "对比 Redis 的主从复制、哨兵和集群模式。",
+    "key_points": ["主从复制：读写分离 + 数据冗余，但主库故障需人工切换", "哨兵：监控主库、自动故障转移（Raft 选Leader 哨兵投票），通知客户端新主，但不解决容量", "集群（Cluster）：16384 个 hash slot 分片到多节点，数据分片解决容量与写瓶颈", "集群 Gossip 协议通信，客户端可 MOVED/ASK 重定向，按 key 的 hash tag 保证多 key 操作同 slot", "从库复制也分全量（RDB）与增量（repl_backlog 偏移量）"],
+    "reference_answer": "三种模式解决的问题递进：主从复制提供读写分离和冷备，从库通过全量同步（首次，主库 bgsave 发 RDB）或增量同步（积压缓冲区 repl_backlog 按偏移量补发）保持一致，缺点是主库挂了需要人工介入切换。哨兵模式在主从之上加了自动高可用：哨兵集群持续探测主库（主观下线→多数哨兵同意后客观下线），通过选举选出 Leader 哨兵执行故障转移（挑选从库晋升为主、通知客户端），但它不做数据分片，容量和写压力仍受单机限制。Cluster 集群模式下数据按 CRC16(key) mod 16384 映射到 hash slot，分布到多个主节点，每个主节点再挂从库做高可用，节点间用 Gossip 协议交换状态，客户端收到 MOVED/ASK 重定向后更新本机 slot 映射；多 key 操作要求 key 落在同一 slot，可用 hash tag {user1} 强制共槽。容量不够上集群，可用性不够上哨兵/集群。",
+    "follow_ups": [
+      "Cluster 模式下为什么需要 16384 个 slot 而不是更多或更少？"
+    ]
+  },
+  {
+    "id": "RD07",
+    "skill": "Redis",
+    "difficulty": "medium",
+    "question": "Redis 为什么这么快？单线程模型是怎样的？",
+    "key_points": ["纯内存操作，远快于磁盘 IO", "高效数据结构（SDS、跳表、listpack、整数数组等）针对场景优化", "单线程命令执行避免锁竞争与上下文切换", "IO 多路复用（epoll）+ 事件驱动，非阻塞处理大量连接", "6.0+ 引入多线程 IO（读写网络包并行，命令执行仍单线程）"],
+    "reference_answer": "Redis 快的核心原因：① 数据全在内存，读写本身就是内存级别；② 数据结构为性能深度定制——SDS、跳表、listpack、quicklist 等，每种都在时间与内存间按场景取舍；③ 命令执行是单线程的，没有多线程的锁竞争和上下文切换开销，也让实现更简单可预测；④ 基于 IO 多路复用（epoll/kqueue）的事件驱动 Reactor 模型，单线程也能并发处理几万连接，网络读写和命令执行靠事件分派。需要澄清的是\"单线程\"指的是命令执行线程：6.0 起 Redis 引入多线程处理网络 IO 的读写和协议解析以突破网卡瓶颈，但命令的执行依然是单线程串行的，保证了原子性语义不变。",
+    "follow_ups": [
+      "哪些命令在线上要慎用？KEYS 和 SCAN 的区别是什么？"
+    ]
+  },
+  {
+    "id": "RD08",
+    "skill": "Redis",
+    "difficulty": "hard",
+    "question": "什么是大 key 和热 key 问题？如何发现和治理？",
+    "key_points": ["大 key：单个 key 的 value 过大（如百万元素的集合、数 MB 的 string），操作阻塞、迁移卡顿、删除慢", "热 key：访问频率极高的 key 集中到单分片，CPU/带宽打满", "发现：redis-cli --bigkeys/--hotkeys、RDB 离线分析、监控命令耗时慢日志", "大 key 治理：拆分（分片/分段）、异步删除 UNLINK、压缩、业务上限制大小", "热 key 治理：本地缓存、key 加随机后缀打散到多节点、读写分离、限流"],
+    "reference_answer": "大 key 指 value 体积异常大的 key，如几百万成员的 Set/ZSet 或数 MB 的 String，危害是：读写和删除耗时高阻塞主线程（DEL 百万元素集合会卡住服务）、集群迁移时卡顿、网络带宽被占满、过期删除集中爆发。热 key 指某几个 key 的访问 QPS 极高，在集群模式下集中打到单个分片，把该节点的 CPU 和网卡打满。发现手段：redis-cli --bigkeys / --hotkeys 在线抽样、对 RDB 做离线分析（如 redis-rdb-tools）、慢日志与监控中看命令耗时分布。治理：大 key 拆分成多个小 key（按 hash 分段）、删除用 UNLINK 异步化、写大对象前压缩并从业务上限制大小；热 key 用本地缓存（Caffeine/Guava）挡一层、把 key 拷贝多份加随机后缀打散到不同节点、提升副本分担读流量，配合客户端限流兜底。关键是把这两类问题纳入上线前的评审与持续监控。",
+    "follow_ups": [
+      "UNLINK 和 DEL 的区别是什么？惰性释放是如何实现的？"
+    ]
+  }
+]

@@ -1,0 +1,90 @@
+[
+  {
+    "id": "JV01",
+    "skill": "Java",
+    "difficulty": "medium",
+    "question": "介绍 JVM 的运行时内存区域划分，以及哪些区域会抛出 OutOfMemoryError。",
+    "key_points": ["线程私有：程序计数器、虚拟机栈、本地方法栈", "线程共享：堆、方法区（元空间 Metaspace）", "堆是对象分配与 GC 的主战场，分新生代/老年代", "栈抛 StackOverflowError；堆 OOM、元空间 OOM 常见"],
+    "reference_answer": "JVM 运行时数据区分为线程私有和线程共享两部分。线程私有的有：程序计数器（记录当前字节码执行位置）、虚拟机栈（方法调用的栈帧，含局部变量表和操作数栈）、本地方法栈（native 方法）。线程共享的有：堆（对象实例的分配区域，分新生代 Eden/Survivor 和老年代，是 GC 的主要工作区）和方法区（JDK 8 后由元空间 Metaspace 实现，存储类元信息，使用本地内存）。会抛 OOM 的主要是堆（对象过多）、元空间（类加载过多、动态生成类）和直接内存；虚拟机栈在深度递归时抛 StackOverflowError，栈扩展失败也可抛 OOM。",
+    "follow_ups": [
+      "线上出现 OOM，你会如何定位是哪个区域、哪段代码引起的？"
+    ]
+  },
+  {
+    "id": "JV02",
+    "skill": "Java",
+    "difficulty": "medium",
+    "question": "HashMap 的底层实现原理是什么？JDK 8 做了哪些优化？",
+    "key_points": ["数组 + 链表 + 红黑树（JDK 8 起）", "put 流程：hash 定位桶 → 冲突拉链 → 链表长度≥8 且数组长度≥64 树化", "扩容：默认容量 16、负载因子 0.75，超过阈值扩容为 2 倍", "JDK 8 优化：链表转红黑树将最坏查找从 O(n) 降到 O(log n)；扩容时高低位拆分减少 rehash", "线程不安全，并发场景用 ConcurrentHashMap"],
+    "reference_answer": "HashMap 底层是数组 + 链表 + 红黑树。put 时先对 key 做 hash（高 16 位异或低 16 位，让高位参与运算减少冲突），按 (n-1) & hash 定位桶；冲突时以链表存储，当链表长度达到 8 且数组容量达到 64 时链表转为红黑树，把最坏查找从 O(n) 优化到 O(log n)。扩容在元素数超过 容量×负载因子（默认 16×0.75）时进行，容量翻倍；JDK 8 扩容时利用 hash 新增位是 0 还是 1，把节点拆成高低位两条链，无需重新计算 hash。HashMap 线程不安全（JDK 7 头插法并发扩容可成环，JDK 8 改尾插仍有数据覆盖问题），并发场景应使用 ConcurrentHashMap。",
+    "follow_ups": [
+      "为什么树化阈值是 8、数组容量要达到 64？ConcurrentHashMap 在 JDK 8 中是如何保证并发安全的？"
+    ]
+  },
+  {
+    "id": "JV03",
+    "skill": "Java",
+    "difficulty": "medium",
+    "question": "常见的垃圾回收算法有哪些？CMS 和 G1 的区别是什么？",
+    "key_points": ["基础算法：标记-清除（碎片）、标记-复制（新生代）、标记-整理（老年代）", "分代收集理论：新生代用复制，老年代用整理/清除", "CMS：并发标记清除，低停顿但产生内存碎片、并发失败退化", "G1：Region 化分代，可预测停顿模型（-XX:MaxGCPauseMillis），整体标记整理、局部复制", "JDK 9+ 默认 G1，CMS 已废弃"],
+    "reference_answer": "基础算法有三种：标记-清除（简单但产生碎片）、标记-复制（空间换时间，适合存活率低的新生代）、标记-整理（无碎片但移动对象成本高，适合老年代），实际分代收集器组合使用。CMS 以最短停顿为目标，并发标记与清除、只有重新标记阶段短暂 STW，缺点是标记清除产生内存碎片、并发阶段抢占 CPU、浮动垃圾可能造成并发模式失败退化为 Serial Old。G1 把堆划分为等大的 Region，逻辑分代、物理不再连续，按\"回收收益优先\"维护优先级队列，实现可预测的停顿时间模型（MaxGCPauseMillis），整体上是标记-整理、Region 之间是复制算法，没有碎片问题，适合大堆，JDK 9 起成为默认收集器。",
+    "follow_ups": [
+      "G1 的停顿时间设得越小越好吗？ZGC 为什么能把停顿做到亚毫秒级？"
+    ]
+  },
+  {
+    "id": "JV04",
+    "skill": "Java",
+    "difficulty": "medium",
+    "question": "synchronized 和 ReentrantLock 有什么区别？分别什么时候用？",
+    "key_points": ["synchronized 是 JVM 层面关键字，自动加锁释放；锁升级：偏向锁→轻量级锁→重量级锁", "ReentrantLock 是 JDK API 层面（AQS 实现），需手动 lock/unlock（finally 中释放）", "ReentrantLock 支持：可中断获取、超时 tryLock、公平锁、多个 Condition 条件队列", "简单同步优先 synchronized；需要高级特性时用 ReentrantLock"],
+    "reference_answer": "synchronized 是 JVM 内建的监视器锁，编译为 monitorenter/monitorexit，代码块结束或异常时自动释放；JDK 6 后引入锁升级（偏向锁→轻量级锁→重量级锁）性能已大幅改善。ReentrantLock 基于 AQS（AbstractQueuedSynchronizer）在 API 层实现，必须手动在 finally 中 unlock。功能差异：ReentrantLock 支持可中断的加锁（lockInterruptibly）、带超时的 tryLock（避免死锁等待）、可设置公平锁，以及多个 Condition 精确唤醒；synchronized 只有一个等待队列。选型上简单互斥直接 synchronized（不易忘记释放锁），需要超时、公平性或多条件队列时选 ReentrantLock。另外读写分离场景可用 ReentrantReadWriteLock 或 StampedLock 进一步提升读并发。",
+    "follow_ups": [
+      "AQS 的核心原理是什么？state 变量和 CLH 队列分别起什么作用？"
+    ]
+  },
+  {
+    "id": "JV05",
+    "skill": "Java",
+    "difficulty": "medium",
+    "question": "线程池的核心参数有哪些？任务提交后的执行流程是怎样的？",
+    "key_points": ["corePoolSize、maximumPoolSize、keepAliveTime、workQueue、threadFactory、handler", "流程：核心线程 → 队列 → 非核心线程 → 拒绝策略", "四种拒绝策略：AbortPolicy（默认抛异常）、CallerRunsPolicy、DiscardPolicy、DiscardOldestPolicy", "IO 密集与 CPU 密集的线程数设置经验（CPU 核数 / 2N+1，需压测）", "不建议 Executors 直接创建：FixedThreadPool 无界队列、CachedThreadPool 无界线程"],
+    "reference_answer": "核心参数有六个：corePoolSize（常驻核心线程数）、maximumPoolSize（最大线程数）、keepAliveTime 及单位（非核心线程空闲存活时间）、workQueue（任务队列）、threadFactory（线程工厂）、handler（拒绝策略）。提交任务的流程：核心线程未满则创建核心线程执行；满了先入队；队列满了再创建非核心线程直到 maximumPoolSize；线程和队列都满则触发拒绝策略（默认 AbortPolicy 抛异常，还有 CallerRuns 让调用者执行、Discard 静默丢弃、DiscardOldest 丢最老任务）。实践上不建议用 Executors 的快捷方法：FixedThreadPool 的无界队列可能 OOM，CachedThreadPool 可创建 Integer.MAX_VALUE 个线程；应手动 new ThreadPoolExecutor 并按 CPU 密集（约 N+1）还是 IO 密集（约 2N，需压测）设置线程数，给线程命名便于排查。",
+    "follow_ups": [
+      "队列还没满、最大线程数也没到，为什么线程池宁可排队也不开新线程？这个设计合理吗？"
+    ]
+  },
+  {
+    "id": "JV06",
+    "skill": "Java",
+    "difficulty": "medium",
+    "question": "描述 Spring Bean 的生命周期。",
+    "key_points": ["实例化（构造器/工厂方法）→ 属性注入（依赖注入）", "Aware 回调：BeanNameAware、ApplicationContextAware 等", "BeanPostProcessor 前置处理 → @PostConstruct/afterPropertiesSet/init-method 初始化 → 后置处理", "AOP 代理通常由 BeanPostProcessor 在初始化后生成", "单例 Bean 容器关闭时销毁回调：@PreDestroy、destroy()"],
+    "reference_answer": "Spring Bean 生命周期大致分四步：① 实例化——通过构造器或工厂方法创建对象；② 属性注入——完成 @Autowired 等依赖注入；③ 初始化——依次执行 Aware 接口回调（BeanNameAware、BeanFactoryAware、ApplicationContextAware）、BeanPostProcessor 的 postProcessBeforeInitialization、@PostConstruct 注解方法、InitializingBean.afterPropertiesSet、自定义 init-method，最后是 BeanPostProcessor 后置处理（AOP 代理对象就是在这一步由 AbstractAutoProxyCreator 生成替换原始对象）；④ 使用与销毁——容器关闭时单例 Bean 依次执行 @PreDestroy、DisposableBean.destroy、自定义 destroy-method。理解 BeanPostProcessor 是理解 Spring 扩展机制和 AOP 生效时机的关键。",
+    "follow_ups": [
+      "为什么在构造器里注入的 @Autowired 字段还是 null？循环依赖 Spring 是如何解决的？"
+    ]
+  },
+  {
+    "id": "JV07",
+    "skill": "Java",
+    "difficulty": "hard",
+    "question": "Spring Boot 的自动装配（Auto-configuration）是如何实现的？",
+    "key_points": ["@SpringBootApplication 包含 @EnableAutoConfiguration", "AutoConfiguration.imports（旧版 spring.factories）文件列出候选配置类", "通过 @Conditional 系列注解（@ConditionalOnClass/@ConditionalOnMissingBean 等）按条件装配", "SPI 机制：约定大于配置，starter 依赖触发装配", "自定义 starter：编写配置类 + 条件注解 + 注册文件"],
+    "reference_answer": "@SpringBootApplication 复合了 @EnableAutoConfiguration，它借助 AutoConfigurationImportSelector 读取所有 jar 包中 META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports 文件（Spring Boot 2.7 之前是 spring.factories），拿到全量候选自动配置类；每个配置类上都有 @Conditional 系列条件注解（@ConditionalOnClass 类路径存在才装配、@ConditionalOnMissingBean 用户没自定义才装配、@ConditionalOnProperty 属性开关等），条件满足的配置类才生效，配合 @Bean 向容器注册组件。这就是\"约定大于配置\"和 starter 的原理：引入 spring-boot-starter-web 就自动装上 Tomcat、MVC。自定义 starter 即：写好配置类 + 条件注解，再在 imports 文件中登记即可。",
+    "follow_ups": [
+      "如何查看哪些自动配置类生效/未生效？如何优雅地覆盖框架的默认 Bean？"
+    ]
+  },
+  {
+    "id": "JV08",
+    "skill": "Java",
+    "difficulty": "hard",
+    "question": "介绍 JVM 的类加载机制与双亲委派模型，为什么需要双亲委派？",
+    "key_points": ["加载过程：加载 → 验证 → 准备 → 解析 → 初始化", "类加载器层级：Bootstrap → Extension/Platform → Application → 自定义", "双亲委派：先委托父加载器加载，父加载器无法完成才自己加载", "作用：避免类的重复加载、保证核心类安全（如 java.lang.String 不被篡改）", "打破双亲委派的场景：SPI（Thread.contextClassLoader）、Tomcat 隔离、热部署"],
+    "reference_answer": "类的生命周期是：加载（读取字节码生成 Class 对象）→ 验证 → 准备（静态变量分配内存设零值）→ 解析（符号引用转直接引用）→ 初始化（执行 <clinit> 方法，触发时机遵循\"主动引用\"规则）。类加载器分四层：Bootstrap（核心库）、Platform/Extension、Application（classpath）、自定义类加载器。双亲委派指收到加载请求先逐级委托父加载器，只有父加载器找不到才自己加载，保证：① 同一个类只会被加载一次，全 JVM 唯一；② 核心 API 如 java.lang.String 由 Bootstrap 加载，防止用户自定义同名类篡改核心库。打破双亲委派的典型场景：JDBC 驱动用线程上下文类加载器让父加载器\"反向\"加载厂商实现；Tomcat 为每个 webapp 用独立加载器实现应用间类隔离；OSGi/热部署按模块动态加载。",
+    "follow_ups": [
+      "Tomcat 为什么要打破双亲委派？如果两个应用依赖同一个库的不同版本怎么办？"
+    ]
+  }
+]

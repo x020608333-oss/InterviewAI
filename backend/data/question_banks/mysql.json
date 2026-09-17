@@ -1,0 +1,90 @@
+[
+  {
+    "id": "MY01",
+    "skill": "MySQL",
+    "difficulty": "medium",
+    "question": "为什么 MySQL 的索引选择 B+ 树而不是 B 树、哈希表或红黑树？",
+    "key_points": ["B+ 树非叶子节点只存键不存数据，单页可容纳更多键，树更矮（3~4 层），磁盘 IO 次数少", "叶子节点通过双向链表相连，范围查询与排序高效", "哈希表不支持范围查询与排序，且存在哈希冲突", "红黑树/AVL 是二叉树，数据量大时树太高，磁盘 IO 次数多", "叶子节点大小按 InnoDB 页（16KB）设计，充分利用磁盘预读"],
+    "reference_answer": "数据库索引存放在磁盘上，核心矛盾是减少磁盘 IO 次数。B+ 树的非叶子节点只存键值不存数据，一个 16KB 的页能容纳上千个键，千万级数据树高也只有 3~4 层，即一次查询最多 3~4 次 IO；而红黑树是二叉的，同样数据量树高得多，IO 次数不可接受。相比哈希索引，B+ 树叶子节点间有双向链表，天然支持范围查询、排序和最左前缀匹配，哈希只适合等值查询。相比 B 树，B+ 树把数据全部下推到叶子层，非叶子节点更瘦、扇出更大，且查询路径长度稳定。InnoDB 页大小 16KB 正好配合磁盘预读特性，按页读取。",
+    "follow_ups": [
+      "一个 2000 万行的表，B+ 树索引大约是多少层？聚簇索引和二级索引有什么区别？什么是回表？"
+    ]
+  },
+  {
+    "id": "MY02",
+    "skill": "MySQL",
+    "difficulty": "medium",
+    "question": "介绍事务的 ACID 特性，以及 MySQL 的四种隔离级别和各自的问题。",
+    "key_points": ["ACID：原子性、一致性、隔离性、持久性", "原子性靠 undo log 回滚，持久性靠 redo log，隔离性靠锁+MVCC", "读未提交：脏读；读已提交：不可重复读；可重复读（InnoDB 默认）：幻读（间隙锁+MVCC 基本避免）；串行化", "RC 与 RR 的区别在于 ReadView 的生成时机"],
+    "reference_answer": "ACID 指原子性（事务要么全成功要么全回滚，由 undo log 保证）、一致性（事务前后数据满足业务约束，是最终目标）、隔离性（并发事务互不干扰，由锁 + MVCC 实现）、持久性（提交后永久生效，由 redo log 的 WAL 机制保证）。隔离级别从低到高：读未提交（能读到未提交数据，存在脏读）、读已提交（只读已提交数据，解决脏读但有不可重复读）、可重复读（InnoDB 默认，同一事务内多次读取一致，通过 MVCC 解决不可重复读，并靠临键锁在很大程度上避免幻读）、串行化（完全串行执行，并发最差）。RC 与 RR 在 InnoDB 中的实现差异主要是 ReadView 的生成时机：RC 每条语句生成一次，RR 整个事务第一次查询时生成并复用。",
+    "follow_ups": [
+      "InnoDB 在可重复读级别下是如何解决幻读的？什么情况下仍会出现幻读？"
+    ]
+  },
+  {
+    "id": "MY03",
+    "skill": "MySQL",
+    "difficulty": "hard",
+    "question": "解释 MVCC（多版本并发控制）的实现原理。",
+    "key_points": ["每行隐藏字段：trx_id（最近修改事务 ID）、roll_pointer（指向 undo log 版本链）", "undo log 版本链保存行的历史版本", "ReadView 包含 m_ids（活跃事务）、min_trx_id、max_trx_id、creator_trx_id", "可见性判断：trx_id < min 可见；>= max 不可见；中间看是否在活跃列表（在则不可见，沿版本链回溯）", "RC 每次查询生成新 ReadView，RR 首次查询生成并复用"],
+    "reference_answer": "MVCC 通过保存数据的多个历史版本实现读写不阻塞。InnoDB 每行记录有三个隐藏字段：DB_TRX_ID（最后修改它的事务 ID）和 DB_ROLL_PTR（回滚指针，指向 undo log 中的上一版本），多次修改的版本通过 roll_pointer 串成版本链。事务做快照读时会生成 ReadView，包含当时所有活跃（未提交）事务的 ID 列表 m_ids、其中的最小值 min_trx_id、下一个将分配的事务 ID max_trx_id、以及自己的 creator_trx_id。可见性判断：trx_id 小于 min 的说明已提交，可见；大于等于 max 的说明 ReadView 之后才开启，不可见；在两者之间的，若在活跃列表中不可见，否则可见；不可见就沿版本链回溯找上一个版本重复判断，直到找到可见版本或链尾。RC 与 RR 的区别只在 ReadView 生成时机：RC 每条 SELECT 都新生成，RR 只在第一次 SELECT 生成并复用整个事务，因此 RR 能重复读。",
+    "follow_ups": [
+      "快照读和当前读有什么区别？SELECT ... FOR UPDATE 属于哪种？"
+    ]
+  },
+  {
+    "id": "MY04",
+    "skill": "MySQL",
+    "difficulty": "medium",
+    "question": "一条 SQL 查询很慢，你会如何排查和优化？",
+    "key_points": ["先定位：慢查询日志（slow_query_log）、EXPLAIN 分析执行计划", "EXPLAIN 关注：type（至少 range，避免 ALL 全表扫描）、key（实际用到的索引）、rows、Extra（Using filesort/temporary 需警惕）", "常见优化：补建/改写联合索引满足最左前缀，覆盖索引避免回表", "SQL 写法问题：索引列上使用函数/隐式转换/前导 % 的 LIKE 导致索引失效", "深分页优化：延迟关联/游标方式；大表考虑分库分表或归档"],
+    "reference_answer": "排查路径：先开启慢查询日志定位慢 SQL，再用 EXPLAIN（或 EXPLAIN ANALYZE）看执行计划，重点关注 type（出现 ALL 说明全表扫描，至少优化到 range，理想是 ref/eq_ref/const）、key 是否用上预期索引、扫描行数 rows、Extra 中是否出现 Using filesort（额外排序）或 Using temporary（临时表）。常见原因与对策：① 索引失效——索引列上用函数或运算、隐式类型转换（字符串列传数字）、LIKE 前导 %、联合索引不满足最左前缀；② 回表过多——用覆盖索引把需要的列放进索引；③ 深分页 LIMIT 100000,10——用延迟关联（先在索引上定位主键再回表）或基于游标的\"上一页最大 ID\"方式；④ 单表数据量过大——归档历史数据、分库分表或引入 OLAP 引擎；⑤ 也可能是锁等待或参数配置问题（如 buffer pool 太小），可结合 SHOW PROFILE、performance_schema 进一步定位。",
+    "follow_ups": [
+      "联合索引 (a, b, c)，WHERE b=1 AND a=2 ORDER BY c 能用上索引吗？为什么？"
+    ]
+  },
+  {
+    "id": "MY05",
+    "skill": "MySQL",
+    "difficulty": "hard",
+    "question": "InnoDB 有哪些锁？间隙锁和临键锁是解决什么问题的？",
+    "key_points": ["按粒度：全局锁、表级锁（表锁/元数据锁 MDL/意向锁）、行级锁", "行锁三种：Record Lock 记录锁、Gap Lock 间隙锁、Next-Key Lock 临键锁（记录+间隙）", "临键锁锁住记录及其前的间隙，防止插入，用于 RR 级别解决幻读", "当前读（select for update/update）才加行锁；唯一索引等值命中退化为记录锁", "死锁：两个事务互相等待，InnoDB 检测后回滚代价小的一方"],
+    "reference_answer": "InnoDB 锁按粒度分全局锁（FTWRL，用于备份）、表级锁（表锁、MDL 元数据锁、意向锁）和行级锁。行级锁有三种实现：Record Lock 锁住索引记录本身；Gap Lock 锁住两条记录之间的开区间间隙，阻止其他事务向间隙插入数据；Next-Key Lock 是记录锁加间隙锁的左开右闭区间。RR 隔离级别下，当前读（SELECT ... FOR UPDATE / UPDATE / DELETE）默认对扫描范围加临键锁，正是靠锁住\"记录 + 间隙\"阻止其他事务插入新行，从而解决幻读；当唯一索引等值查询命中时临键锁退化为纯记录锁，减少锁冲突。注意行锁是加在索引上的，若条件无索引会升级为扫全表并锁住所有记录。并发修改还可能产生死锁，InnoDB 用 wait-for 图检测死锁并回滚代价较小的事务，应用侧应按相同顺序访问资源、缩短事务。",
+    "follow_ups": [
+      "如何线上排查死锁？innodb_print_all_deadlocks 和 SHOW ENGINE INNODB STATUS 能看到什么？"
+    ]
+  },
+  {
+    "id": "MY06",
+    "skill": "MySQL",
+    "difficulty": "medium",
+    "question": "redo log、undo log 和 binlog 的作用分别是什么？它们的写入顺序是怎样的？",
+    "key_points": ["redo log：InnoDB 引擎层，物理日志，WAL 保证崩溃恢复与持久性，循环写", "undo log：回滚日志，保证原子性（回滚）并支撑 MVCC 版本链", "binlog：Server 层，逻辑日志（语句/行格式），用于主从复制与时间点恢复，追加写", "写入顺序：undo → redo prepare → 写 binlog → redo commit（两阶段提交）", "两阶段提交保证 redo 与 binlog 一致，防止主从不一致"],
+    "reference_answer": "redo log 是 InnoDB 的物理日志，采用 WAL（先写日志后刷数据页）把随机写变成顺序写，崩溃重启后靠它把已提交事务的数据页重放恢复，保证持久性；它是固定大小的循环写。undo log 记录逻辑反操作，用于事务回滚（保证原子性），同时是 MVCC 版本链的基础。binlog 是 Server 层的逻辑日志（STATEMENT/ROW/MIXED 格式），追加写，用于主从复制和基于时间点的数据恢复。一个 UPDATE 的写入顺序由两阶段提交保证：先写 undo，再写 redo log 并标记 prepare，写入 binlog，最后提交 redo log 为 commit 状态。两阶段提交解决了 redo log 和 binlog 两个独立日志的一致性问题——否则崩溃后可能出现主库有数据而从库没有的不一致。",
+    "follow_ups": [
+      "为什么有了 redo log 还需要 binlog？只用其中一个行不行？"
+    ]
+  },
+  {
+    "id": "MY07",
+    "skill": "MySQL",
+    "difficulty": "medium",
+    "question": "什么是覆盖索引和最左前缀原则？如何设计联合索引？",
+    "key_points": ["联合索引按 (a,b,c) 字典序排序，查询条件需从最左列开始连续匹配", "遇到范围查询后面的列无法使用索引排序/查找", "覆盖索引：查询所需列全部包含在索引中，免回表", "设计原则：区分度高的列在前、等值列在前范围列在后、尽量覆盖高频查询", "索引不是越多越好：占空间、降低写入性能"],
+    "reference_answer": "联合索引的底层是按第一列排序、第一列相同再按第二列排序的字典序结构，因此查询必须从最左列开始且连续命中才能走索引，遇到范围条件（>、<、between）之后的列索引无法继续用于查找（排序仍可能利用）。覆盖索引指一个查询所需的所有列（含 SELECT 列）都在某棵索引树上，无需回聚簇索引取行，把随机 IO 降到最低，是高频查询的重要优化手段。设计联合索引的经验：等值条件的列放前面、范围条件的列放最后；把区分度高的列放前面；将 SELECT 中的少量额外列纳入索引形成覆盖索引；同时权衡写放大——索引会拖慢 INSERT/UPDATE 并占用空间，避免冗余索引。",
+    "follow_ups": [
+      "索引列的区分度如何计算？为什么性别列建索引通常没意义？"
+    ]
+  },
+  {
+    "id": "MY08",
+    "skill": "MySQL",
+    "difficulty": "hard",
+    "question": "MySQL 主从复制的原理是什么？主从延迟怎么处理？",
+    "key_points": ["主库写 binlog → 从库 IO 线程拉取写入 relay log → SQL 线程重放", "复制方式：异步（默认）、半同步（至少一个从库确认）、组复制 MGR", "延迟原因：从库单线程重放（大事务/DDL 慢）、从库机器性能差、网络", "解决：并行复制（MTS）、拆大事务、读自己的写（强制走主）、监控 Seconds_Behind_Master"],
+    "reference_answer": "主从复制流程：主库提交事务时写 binlog，从库的 IO 线程通过 dump 协程拉取 binlog 追加到本地 relay log，再由 SQL 线程读取 relay log 重放，实现数据同步。按一致性强度分：异步复制（主库不等从库，默认，可能丢数据）、半同步复制（至少一个从库收到 binlog 才返回客户端成功）、组复制 MGR（Paxos 多数派）。主从延迟的常见原因：SQL 线程重放慢（旧版本单线程、大事务、大 DDL）、从库硬件或配置差、网络抖动。应对手段：开启基于组提交的并行复制（MTS）让从库多线程重放；业务侧拆分大事务、DDL 用 pt-online-schema-change 类工具；对\"写后立刻读\"的场景采用强制读主或会话粘性、引入 GTID 精确位点等待；监控 Seconds_Behind_Master 并告警。",
+    "follow_ups": [
+      "如果主库宕机且部分 binlog 还没同步到从库，如何尽量不丢数据？"
+    ]
+  }
+]
