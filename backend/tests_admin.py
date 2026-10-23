@@ -5,8 +5,10 @@ import sys
 import urllib.error
 import urllib.request
 
-BASE = "http://127.0.0.1:8765/api"
+BASE = os.getenv("INTERVIEWAI_BASE", "http://127.0.0.1:8765") + "/api"
 BANK_DIR = os.path.join("data", "question_banks")
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "").strip()
+DEMO_PASSWORD = os.getenv("DEMO_PASSWORD", "demo1234").strip()
 
 NEW_Q = {
     "skill": "Go",
@@ -38,10 +40,13 @@ def call(path, method="GET", body=None, token=None, expect_error=False):
 
 def main():
     print("== 1. admin / demo 登录 ==")
-    _, admin = call("/auth/login", "POST", {"username": "admin", "password": "admin1234"})
+    if not ADMIN_PASSWORD:
+        print("请先设置 ADMIN_PASSWORD 环境变量（需与服务启动时一致；未配置时看启动日志里的随机密码）")
+        return 1
+    _, admin = call("/auth/login", "POST", {"username": "admin", "password": ADMIN_PASSWORD})
     print("admin user:", admin["user"])
     assert admin["user"]["is_admin"] is True
-    _, demo = call("/auth/login", "POST", {"username": "demo", "password": "demo1234"})
+    _, demo = call("/auth/login", "POST", {"username": "demo", "password": DEMO_PASSWORD})
     assert demo["user"]["is_admin"] is False
     at, dt = admin["token"], demo["token"]
 
@@ -132,7 +137,8 @@ def main():
 
 if __name__ == "__main__":
     try:
-        main()
+        rc = main()
     except Exception as exc:
         print("FAILED:", exc, file=sys.stderr)
         sys.exit(1)
+    sys.exit(int(rc or 0))

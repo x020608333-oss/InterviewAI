@@ -66,9 +66,11 @@ def analyze_answer(item: dict, answer: str, followup_count: int) -> dict:
         level, comment = "较差", "回答比较零散，核心概念还需要系统巩固。"
 
     follow_ups = item.get("follow_ups", [])
-    wants_follow_up = coverage < 0.6 and followup_count < MAX_FOLLOWUPS and follow_ups
+    # 每题最多追问 min(MAX_FOLLOWUPS, 该题预置追问题数)：不能把同一个追问问两遍
+    max_for_question = min(MAX_FOLLOWUPS, len(follow_ups))
+    wants_follow_up = coverage < 0.6 and followup_count < max_for_question
     if wants_follow_up:
-        follow_up_question = follow_ups[followup_count % len(follow_ups)]
+        follow_up_question = follow_ups[followup_count]
         decision = "follow_up"
         reason = "回答要点覆盖不足，顺着薄弱点继续考察。"
     else:
@@ -99,6 +101,7 @@ def build_report(plan: dict, turns: list[dict]) -> dict:
             "overall_score": 0,
             "grade": "待提升",
             "summary": "本场面试未记录到有效作答，无法评估。建议重新安排一场面试。",
+            "coverage": {"answered": 0, "total": len(plan.get("items", []))},
             "skill_scores": [],
             "strengths": [],
             "weaknesses": ["未作答任何题目"],
@@ -111,7 +114,9 @@ def build_report(plan: dict, turns: list[dict]) -> dict:
     for turn in turns:
         by_question.setdefault(turn["q_index"], []).append(turn)
 
+    total_questions = len(plan.get("items", []))
     question_reviews = []
+    question_scores: list[int] = []
     skill_map: dict[str, list[int]] = {}
     strength_pool: list[str] = []
     gap_pool: list[str] = []
@@ -120,6 +125,7 @@ def build_report(plan: dict, turns: list[dict]) -> dict:
             continue
         item = plan["items"][q_index]
         final = round(sum(t["analysis"]["score"] for t in group) / len(group))
+        question_scores.append(final)
         skill_map.setdefault(item["skill"], []).append(final)
         question_reviews.append({
             "question": item["question"],
@@ -138,7 +144,12 @@ def build_report(plan: dict, turns: list[dict]) -> dict:
         }
         for skill, scores in skill_map.items()
     ]
-    overall = round(sum(s["score"] for s in skill_scores) / len(skill_scores))
+    # 未作答的题按 0 分计入总分：7 题只答 1 题不能拿到 98 分
+    overall = round(sum(question_scores) / max(total_questions, 1))
+    coverage = {
+        "answered": len(question_reviews),
+        "total": total_questions,
+    }
     grade = _grade(overall)
 
     ranked = sorted(skill_scores, key=lambda s: s["score"])
@@ -151,12 +162,14 @@ def build_report(plan: dict, turns: list[dict]) -> dict:
 
     if len(ranked) == 1:
         summary = (
-            f"本场面试完成 {len(question_reviews)} 道题，综合 {overall} 分（{grade}）。"
+            f"本场面试完成 {len(question_reviews)}/{total_questions} 道题，"
+            f"综合 {overall} 分（{grade}）。"
             f"本次仅覆盖「{ranked[0]['skill']}」，完成更多题目可以获得更全面的技能评估。"
         )
     else:
         summary = (
-            f"本场面试共完成 {len(question_reviews)} 道题，综合 {overall} 分（{grade}）。"
+            f"本场面试完成 {len(question_reviews)}/{total_questions} 道题，"
+            f"综合 {overall} 分（{grade}）。"
             f"「{ranked[-1]['skill']}」表现最好，「{ranked[0]['skill']}」相对薄弱，"
             "建议按学习计划针对性提升。"
         )
@@ -191,6 +204,7 @@ def build_report(plan: dict, turns: list[dict]) -> dict:
         "overall_score": overall,
         "grade": grade,
         "summary": summary,
+        "coverage": coverage,
         "skill_scores": skill_scores,
         "strengths": strengths[:4],
         "weaknesses": weaknesses[:4],

@@ -1,5 +1,6 @@
 """面试核心流程：创建面试 → 回答 → AI 追问 → 结束 → 报告 → 历史。"""
 import json
+import threading
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -14,6 +15,20 @@ from ..deps import get_current_user
 from ..models import Interview, InterviewMessage, Report, User, utcnow
 
 router = APIRouter(prefix="/api/interviews", tags=["interviews"])
+
+# 单进程内按面试加锁：防止同一题被并发提交导致重复推进/重复计分。
+# 多进程部署时应改为数据库行锁或 Redis 分布式锁。
+_answer_locks: dict[int, threading.Lock] = {}
+_answer_locks_guard = threading.Lock()
+
+
+def _answer_lock(interview_id: int) -> threading.Lock:
+    with _answer_locks_guard:
+        lock = _answer_locks.get(interview_id)
+        if lock is None:
+            lock = threading.Lock()
+            _answer_locks[interview_id] = lock
+        return lock
 
 
 class CreateInterviewIn(BaseModel):
@@ -172,6 +187,11 @@ def answer(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    with _answer_lock(interview_id):
+        return _answer_impl(interview_id, payload, user, db)
+
+
+def _answer_impl(interview_id: int, payload: AnswerIn, user: User, db: Session):
     interview = _get_owned(interview_id, user, db)
     if interview.status != "ongoing":
         raise HTTPException(status_code=400, detail="本场面试已结束")
@@ -185,9 +205,21 @@ def answer(
     item = items[q_index]
     remaining = len(items) - q_index - 1
 
-    # 1) 面试官 Agent 分析回答（LLM / 离线引擎）
+    history = [
+        {"role": m.role, "content": m.content}
+        for m in sorted(interview.messages, key=lambda m: m.id)[-6:]
+        if m.role in ("user", "assistant")
+    ]
+
+    # 1) 面试官 Agent 分析回答（LLM / 离线引擎），带上前文以理解追问上下文
     analysis = analyze_answer(
-        item, content, interview.followup_count, interview.position, interview.difficulty, remaining
+        item,
+        content,
+        interview.followup_count,
+        interview.position,
+        interview.difficulty,
+        remaining,
+        history=history,
     )
     user_msg = InterviewMessage(
         interview_id=interview.id,

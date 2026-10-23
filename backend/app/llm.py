@@ -65,7 +65,12 @@ class LLMClient:
         self.client = None
         if LLM_ENABLED and OpenAI is not None:
             try:
-                self.client = OpenAI(api_key=LLM_API_KEY, base_url=LLM_BASE_URL)
+                self.client = OpenAI(
+                    api_key=LLM_API_KEY,
+                    base_url=LLM_BASE_URL,
+                    timeout=60.0,
+                    max_retries=1,
+                )
                 logger.info("LLM 已启用: %s @ %s", LLM_MODEL, LLM_BASE_URL)
             except Exception as exc:  # pragma: no cover
                 logger.warning("LLM 初始化失败，进入离线演示模式: %s", exc)

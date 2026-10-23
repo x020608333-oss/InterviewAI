@@ -1,5 +1,6 @@
 """应用配置：从环境变量与项目根 .env 读取。"""
 import os
+import secrets
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parents[1]  # backend/
@@ -43,8 +44,25 @@ QUESTIONS_PER_SKILL = int(os.getenv("QUESTIONS_PER_SKILL", "2"))
 TOTAL_QUESTIONS = int(os.getenv("TOTAL_QUESTIONS", "7"))
 
 # ---- 认证 ----
-SECRET_KEY = os.getenv("SECRET_KEY", "interviewai-dev-secret-change-me")
+# 未配置 SECRET_KEY 时每次启动随机生成（token 会随重启失效），避免使用公开默认密钥被伪造
+SECRET_KEY = os.getenv("SECRET_KEY", "").strip() or secrets.token_urlsafe(48)
+SECRET_KEY_IS_EPHEMERAL = not os.getenv("SECRET_KEY", "").strip()
 TOKEN_EXPIRE_HOURS = int(os.getenv("TOKEN_EXPIRE_HOURS", "72"))
+
+# 初始管理员密码：未配置时随机生成并在首次启动日志中打印一次，不再使用 admin1234
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "").strip() or secrets.token_urlsafe(12)
+ADMIN_PASSWORD_IS_EPHEMERAL = not os.getenv("ADMIN_PASSWORD", "").strip()
+DEMO_PASSWORD = os.getenv("DEMO_PASSWORD", "demo1234").strip()
+
+# CORS：默认只放行本地前端；同源部署时无需放开 *
+CORS_ORIGINS = [
+    o.strip()
+    for o in os.getenv(
+        "CORS_ORIGINS",
+        "http://localhost:8765,http://127.0.0.1:8765,http://localhost:8000,http://127.0.0.1:8000",
+    ).split(",")
+    if o.strip()
+]
 
 # ---- 难度 ----
 DIFFICULTIES = ("junior", "middle", "senior")

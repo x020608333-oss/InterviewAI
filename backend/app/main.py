@@ -9,7 +9,15 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from .config import FRONTEND_DIR, LLM_MODEL
+from .config import (
+    ADMIN_PASSWORD,
+    ADMIN_PASSWORD_IS_EPHEMERAL,
+    CORS_ORIGINS,
+    DEMO_PASSWORD,
+    FRONTEND_DIR,
+    LLM_MODEL,
+    SECRET_KEY_IS_EPHEMERAL,
+)
 from .database import Base, SessionLocal, engine
 from .llm import llm
 from .models import User
@@ -36,11 +44,17 @@ def _seed_users() -> None:
     db = SessionLocal()
     try:
         if not db.query(User).filter(User.username == "demo").first():
-            db.add(User(username="demo", password_hash=hash_password("demo1234")))
-            logger.info("demo user seeded (demo / demo1234)")
+            db.add(User(username="demo", password_hash=hash_password(DEMO_PASSWORD)))
+            logger.info("demo user seeded")
         if not db.query(User).filter(User.username == "admin").first():
-            db.add(User(username="admin", password_hash=hash_password("admin1234"), is_admin=True))
-            logger.info("admin user seeded (admin / admin1234)")
+            db.add(User(username="admin", password_hash=hash_password(ADMIN_PASSWORD), is_admin=True))
+            if ADMIN_PASSWORD_IS_EPHEMERAL:
+                logger.warning(
+                    "admin 初始密码（本次随机生成，仅打印一次）: %s —— 请设置 ADMIN_PASSWORD 后重启",
+                    ADMIN_PASSWORD,
+                )
+            else:
+                logger.info("admin user seeded from ADMIN_PASSWORD")
         db.commit()
     finally:
         db.close()
@@ -58,6 +72,8 @@ async def lifespan(_: FastAPI):
         LLM_MODEL,
         len(kb.questions),
     )
+    if SECRET_KEY_IS_EPHEMERAL:
+        logger.warning("未配置 SECRET_KEY：已使用随机密钥，重启后现有登录 token 会失效")
     yield
 
 
@@ -65,9 +81,9 @@ app = FastAPI(title="InterviewAI - AI 智能面试系统", version="1.0.0", life
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
+    allow_origins=CORS_ORIGINS,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
